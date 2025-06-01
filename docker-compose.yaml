@@ -1,0 +1,91 @@
+# docker-compose.transaction.yaml
+version: '3.9'
+
+services:
+
+  nginx-transaction-member:
+    image: nginx:alpine
+    container_name: nginx-transaction-member
+    ports:
+      - "9004:80"
+    volumes:
+      - .:/var/www
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - laravel
+    networks:
+      - app-network-microservice
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-transaction-member
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: db_tubes_transaction_member
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 35s
+      timeout: 30s
+      retries: 5
+    volumes:
+      - mysql_transaction_data_member:/var/lib/mysql
+    networks:
+      app-network-microservice:
+        aliases:
+          - mysql-transaction-member
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin-transaction-member
+    environment:
+      PMA_HOST: mysql-transaction-member
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: 12345
+    ports:
+      - "8086:80"
+    depends_on:
+      - mysql
+    networks:
+      - app-network-microservice
+
+  laravel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: service-transaction-member
+    volumes:
+      - .:/var/www
+    environment:
+      APP_ENV: local
+      APP_KEY: base64:TTTn27QFRaokwDBlpDgFNyREZIn1BDkSR3IEroT4u7k=
+      APP_DEBUG: "true"
+      APP_URL: http://localhost
+      DB_CONNECTION: mysql
+      DB_HOST: mysql-transaction-member
+      DB_PORT: 3306
+      DB_DATABASE: db_tubes_transaction_member
+      DB_USERNAME: root
+      DB_PASSWORD: 12345
+
+      # GATEWAY URLS: pake Traefik host atau Tailscale IP kalo beda laptop
+      MEMBER_GRAPHQL_URL: http://traefik/api/v1/members/graphql
+      PRODUCT_GRAPHQL_URL: http://traefik/api/v1/products/graphql
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network-microservice
+    command: >
+      sh -c "
+      sleep 5 &&
+      php artisan migrate --force &&
+      php-fpm
+      "
+
+networks:
+  app-network-microservice:
+    external: true
+
+volumes:
+  mysql_transaction_data_member:
