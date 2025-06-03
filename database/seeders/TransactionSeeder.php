@@ -42,7 +42,7 @@ class TransactionSeeder extends Seeder
             ['id' => 5, 'slug' => 'sayur-bayam', 'name' => 'Sayur Bayam', 'description' => 'Sayur bayam segar', 'price' => 5000, 'stock' => 40, 'unit' => 'ikat'],
         ];
 
-        $statuses = ['pending', 'paid', 'shipped', 'completed'];
+        $statuses = ['pending', 'completed', 'cancelled'];
 
         for ($i = 1; $i <= 10; $i++) {
             $member = $members[array_rand($members)];

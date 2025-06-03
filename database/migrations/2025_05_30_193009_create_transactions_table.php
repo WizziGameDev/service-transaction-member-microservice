@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('member_name');
             $table->decimal('total_price', 15, 2);
             $table->date('transaction_date');
+            $table->enum('status', ['pending', 'completed', 'cancelled'])->default('pending');
             $table->timestamps();
         });
     }
