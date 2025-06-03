@@ -5,7 +5,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN composer install --ignore-platform-req=ext-sockets --prefer-dist --no-dev --optimize-autoloader
+RUN composer require vladimir-yuldashev/laravel-queue-rabbitmq --no-interaction --ignore-platform-req=ext-sockets \
+    && composer install --ignore-platform-req=ext-sockets --prefer-dist --no-dev --optimize-autoloader
 
 # ===== APP STAGE =====
 FROM php:8.2-fpm-alpine

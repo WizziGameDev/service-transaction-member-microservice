@@ -100,15 +100,22 @@ class TransactionController extends Controller
                     return $this->errorResponse('stock', "Insufficient stock for product {$productData['name']}", 400);
                 }
 
+                // Member Price
+                $price = $productData['priceForMember'];
+                if ($price === null) {
+                    DB::rollBack();
+                    return $this->errorResponse('priceForMember', "Price for member not set for product {$productData['name']}", 400);
+                }
+
                 $this->updateProductStock($productData['id'], $productData['stock'] - $item['quantity']);
 
-                $subtotal = $productData['price'] * $item['quantity'];
+                $subtotal = $price * $item['quantity'];
                 $totalPrice += $subtotal;
 
                 $transactionItemsData[] = [
                     'product_id' => $productData['id'],
                     'product_name' => $productData['name'],
-                    'price' => $productData['price'],
+                    'price' => $price,
                     'quantity' => $item['quantity'],
                     'subtotal' => $subtotal,
                 ];
@@ -227,15 +234,22 @@ class TransactionController extends Controller
                         return $this->errorResponse('stock', "Insufficient stock for product {$productData['name']}", 400);
                     }
 
+                    // Price for member
+                    $price = $productData['priceForMember'];
+                    if ($price === null) {
+                        DB::rollBack();
+                        return $this->errorResponse('priceForMember', "Price for member not set for product {$productData['name']}", 400);
+                    }
+
                     $this->updateProductStock($productData['id'], $productData['stock'] - $item['quantity']);
 
-                    $subtotal = $productData['price'] * $item['quantity'];
+                    $subtotal = $price * $item['quantity'];
                     $totalPrice += $subtotal;
 
                     $transaction->items()->create([
                         'product_id' => $productData['id'],
                         'product_name' => $productData['name'],
-                        'price' => $productData['price'],
+                        'price' => $price,
                         'quantity' => $item['quantity'],
                         'subtotal' => $subtotal,
                     ]);
@@ -353,7 +367,7 @@ class TransactionController extends Controller
             productById(id: $id) {
                 id
                 name
-                price
+                priceForMember
                 stock
             }
         }
