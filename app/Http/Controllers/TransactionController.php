@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\Transaction;
+use App\Jobs\SendNotificationJob;
 
 class TransactionController extends Controller
 {
@@ -59,6 +60,7 @@ class TransactionController extends Controller
         $validator = validator($request->all(), [
             'member_id' => 'required|integer',
             'transaction_date' => 'required|date',
+            'status' => 'required|in:pending,completed,cancelled',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|integer',
             'items.*.quantity' => 'required|integer|min:1',
@@ -118,6 +120,7 @@ class TransactionController extends Controller
                 'member_name' => $memberData['name'],
                 'total_price' => $totalPrice,
                 'transaction_date' => $request->transaction_date,
+                'status' => $request->status,
             ]);
 
             foreach ($transactionItemsData as $itemData) {
@@ -125,6 +128,24 @@ class TransactionController extends Controller
             }
 
             DB::commit();
+
+            // Kirim notifikasi
+            SendNotificationJob::dispatch([
+                'type' => 'transaction_created',
+                'transaction_id' => $transaction->id,
+                'member_id' => $transaction->member_id,
+                'member_name' => $transaction->member_name,
+                'phone' => $memberData['phone'] ?? null, // kalau ada
+                'products' => collect($transactionItemsData)->map(function ($item) {
+                    return [
+                        'product_id' => $item['product_id'],
+                        'product_name' => $item['product_name'],
+                        'quantity' => $item['quantity'],
+                        'subtotal' => $item['subtotal'],
+                    ];
+                }),
+                'message' => 'Transaction created successfully',
+            ]);
 
             return response()->json([
                 'status' => 201,
@@ -150,6 +171,7 @@ class TransactionController extends Controller
         $validator = validator($request->all(), [
             'member_id' => 'sometimes|integer',
             'transaction_date' => 'sometimes|date',
+            'status' => 'sometimes|in:pending,completed,cancelled',
             'items' => 'sometimes|array|min:1',
             'items.*.product_id' => 'required_with:items|integer',
             'items.*.quantity' => 'required_with:items|integer|min:1',
@@ -226,6 +248,22 @@ class TransactionController extends Controller
 
             DB::commit();
 
+            SendNotificationJob::dispatch([
+                'type' => 'transaction_updated',
+                'transaction_id' => $transaction->id,
+                'member_id' => $transaction->member_id,
+                'member_name' => $transaction->member_name,
+                'products' => $transaction->items->map(function ($item) {
+                    return [
+                        'product_id' => $item->product_id,
+                        'product_name' => $item->product_name,
+                        'quantity' => $item->quantity,
+                        'subtotal' => $item->subtotal,
+                    ];
+                }),
+                'message' => 'Transaction updated successfully',
+            ]);
+
             return response()->json([
                 'status' => 200,
                 'message' => 'Transaction updated successfully',
@@ -260,6 +298,23 @@ class TransactionController extends Controller
             $transaction->delete();
 
             DB::commit();
+
+            SendNotificationJob::dispatch([
+                'type' => 'transaction_deleted',
+                'transaction_id' => $transaction->id,
+                'member_id' => $transaction->member_id,
+                'member_name' => $transaction->member_name,
+                'products' => $transaction->items->map(function ($item) {
+                    return [
+                        'product_id' => $item->product_id,
+                        'product_name' => $item->product_name,
+                        'quantity' => $item->quantity,
+                        'subtotal' => $item->subtotal,
+                    ];
+                }),
+                'message' => 'Transaction deleted successfully',
+            ]);
+
 
             return response()->json([
                 'status' => 200,
@@ -322,6 +377,59 @@ class TransactionController extends Controller
             throw new \Exception("Failed to update stock for product ID $id");
         }
     }
+
+    public function updateStatus(Request $request, $id)
+    {
+        $validator = validator($request->all(), [
+            'status' => 'required|in:pending,completed,cancelled'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('status', $validator->errors()->first('status'), 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $transaction = Transaction::find($id);
+            if (!$transaction) {
+                DB::rollBack();
+                return $this->notFoundResponse('transaction_id', 'Transaction not found');
+            }
+
+            $transaction->status = $request->status;
+            $transaction->save();
+
+            SendNotificationJob::dispatch([
+                'type' => 'transaction_status_updated',
+                'transaction_id' => $transaction->id,
+                'member_id' => $transaction->member_id,
+                'member_name' => $transaction->member_name,
+                'status' => $transaction->status,
+                'products' => $transaction->items->map(function ($item) {
+                    return [
+                        'product_id' => $item->product_id,
+                        'product_name' => $item->product_name,
+                        'quantity' => $item->quantity,
+                        'subtotal' => $item->subtotal,
+                    ];
+                }),
+                'message' => 'Transaction status updated successfully',
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Transaction status updated successfully',
+                'data' => $transaction,
+                'errors' => null
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->errorResponse('sql', 'Failed to update status: ' . $e->getMessage(), 500);
+        }
+    }
+
 
     // Helper: Error Responses
     private function errorResponse($field, $message, $status)

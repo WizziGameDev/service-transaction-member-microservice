@@ -5,14 +5,23 @@ WORKDIR /app
 
 COPY . .
 
-RUN composer install --prefer-dist --no-dev --optimize-autoloader
+RUN composer install --ignore-platform-req=ext-sockets --prefer-dist --no-dev --optimize-autoloader
 
 # ===== APP STAGE =====
 FROM php:8.2-fpm-alpine
 
-RUN apk add --no-cache bash libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev libzip-dev icu-dev \
+RUN apk add --no-cache \
+    bash \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
+    freetype-dev \
+    libzip-dev \
+    icu-dev \
+    linux-headers \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install pdo pdo_mysql intl gd zip
+    && docker-php-ext-install pdo pdo_mysql intl gd zip sockets
+
 
 RUN apk add --no-cache nodejs npm
 
@@ -26,4 +35,3 @@ RUN chown -R www-data:www-data /var/www \
 EXPOSE 9000
 
 CMD ["php-fpm"]
-

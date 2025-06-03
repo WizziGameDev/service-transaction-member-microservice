@@ -23,7 +23,12 @@ done
 # Tunggu Laravel ready (optional, kita skip dulu karena seed gak butuh fpm ready)
 sleep 10
 
-# Seed database
+# Seed database (opsional)
 echo "🌱 Running Laravel seed..."
+docker exec service-transaction-member php artisan migrate:fresh --seed
 
-echo "🎉 All services up & seed completed!"
+# Jalankan Queue Worker
+echo "🚀 Starting Laravel queue worker..."
+docker exec -d service-transaction-member php artisan queue:work --verbose --tries=5
+
+echo "🎉 All services up, migration seeded, and queue worker running!"

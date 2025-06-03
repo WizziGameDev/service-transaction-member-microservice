@@ -42,14 +42,18 @@ class TransactionSeeder extends Seeder
             ['id' => 5, 'slug' => 'sayur-bayam', 'name' => 'Sayur Bayam', 'description' => 'Sayur bayam segar', 'price' => 5000, 'stock' => 40, 'unit' => 'ikat'],
         ];
 
+        $statuses = ['pending', 'paid', 'shipped', 'completed'];
+
         for ($i = 1; $i <= 10; $i++) {
             $member = $members[array_rand($members)];
+            $status = $statuses[array_rand($statuses)];
             $transaction = Transaction::create([
                 'transaction_code' => 'TRX-' . Str::upper(Str::random(8)),
                 'member_id' => $member['id'],
                 'member_name' => $member['name'],
                 'total_price' => 0,
                 'transaction_date' => Carbon::now()->subDays(rand(0, 30))->format('Y-m-d'),
+                'status' => $status,
             ]);
 
             $total = 0;
