@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -137,9 +138,10 @@ class TransactionController extends Controller
             DB::commit();
 
             // Kirim notifikasi
-            SendNotificationJob::dispatch([
+            ProcessNotification::dispatch([
                 'type' => 'transaction_created',
                 'transaction_id' => $transaction->id,
+                'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
                 'phone' => $memberData['phone'] ?? null, // kalau ada
@@ -150,7 +152,7 @@ class TransactionController extends Controller
                         'quantity' => $item['quantity'],
                         'subtotal' => $item['subtotal'],
                     ];
-                }),
+                })->toArray(),
                 'message' => 'Transaction created successfully',
             ]);
 
@@ -262,9 +264,10 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            SendNotificationJob::dispatch([
+            ProcessNotification::dispatch([
                 'type' => 'transaction_updated',
                 'transaction_id' => $transaction->id,
+                'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
                 'products' => $transaction->items->map(function ($item) {
@@ -274,7 +277,7 @@ class TransactionController extends Controller
                         'quantity' => $item->quantity,
                         'subtotal' => $item->subtotal,
                     ];
-                }),
+                })->toArray(),
                 'message' => 'Transaction updated successfully',
             ]);
 
@@ -317,6 +320,7 @@ class TransactionController extends Controller
                 'type' => 'transaction_deleted',
                 'transaction_id' => $transaction->id,
                 'member_id' => $transaction->member_id,
+                'transaction_code' => $transaction->transaction_code,
                 'member_name' => $transaction->member_name,
                 'products' => $transaction->items->map(function ($item) {
                     return [
@@ -325,7 +329,7 @@ class TransactionController extends Controller
                         'quantity' => $item->quantity,
                         'subtotal' => $item->subtotal,
                     ];
-                }),
+                })->toArray(),
                 'message' => 'Transaction deleted successfully',
             ]);
 
@@ -413,9 +417,10 @@ class TransactionController extends Controller
             $transaction->status = $request->status;
             $transaction->save();
 
-            SendNotificationJob::dispatch([
+            ProcessNotification::dispatch([
                 'type' => 'transaction_status_updated',
                 'transaction_id' => $transaction->id,
+                'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
                 'status' => $transaction->status,
@@ -426,7 +431,7 @@ class TransactionController extends Controller
                         'quantity' => $item->quantity,
                         'subtotal' => $item->subtotal,
                     ];
-                }),
+                })->toArray(),
                 'message' => 'Transaction status updated successfully',
             ]);
 

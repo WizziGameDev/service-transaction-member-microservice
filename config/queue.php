@@ -73,23 +73,23 @@ return [
         ],
 
         'rabbitmq' => [
-        'driver' => 'rabbitmq',
-        'host' => env('RABBITMQ_HOST', '127.0.0.1'),
-        'port' => env('RABBITMQ_PORT', 5672),
-        'vhost' => env('RABBITMQ_VHOST', '/'),
-        'login' => env('RABBITMQ_USER', 'admin'),
-        'password' => env('RABBITMQ_PASSWORD', 'admin12345'),
-        'queue' => env('RABBITMQ_QUEUE', 'default'),
-        'options' => [
-            'exchange' => [
-                'name' => env('RABBITMQ_EXCHANGE_NAME', null),
-                'type' => env('RABBITMQ_EXCHANGE_TYPE', 'direct'),
-                'declare' => env('RABBITMQ_EXCHANGE_DECLARE', true),
+            'driver' => 'rabbitmq',
+            'factory_class' => \Enqueue\AmqpLib\AmqpConnectionFactory::class,
+            'host' => env('RABBITMQ_HOST', '127.0.0.1'),
+            'port' => env('RABBITMQ_PORT', 5672),
+            'vhost' => env('RABBITMQ_VHOST', '/'),
+            'login' => env('RABBITMQ_USER', 'admin'),
+            'password' => env('RABBITMQ_PASSWORD', 'admin12345'),
+            'queue' => env('RABBITMQ_QUEUE', 'default'),
+
+            'options' => [
+                'exchange' => [
+                    'name' => env('RABBITMQ_EXCHANGE_NAME', 'default'),
+                    'type' => env('RABBITMQ_EXCHANGE_TYPE', 'direct'),
+                    'declare' => env('RABBITMQ_EXCHANGE_DECLARE', true),
+                ],
             ],
         ],
-],
-
-
     ],
 
     /*
