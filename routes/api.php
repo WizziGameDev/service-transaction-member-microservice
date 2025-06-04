@@ -15,7 +15,7 @@ Route::get('/transactions-member', [TransactionController::class, 'index']);
 Route::get('/transactions-member/{id}', [TransactionController::class, 'show']);
 Route::post('/transactions-member', [TransactionController::class, 'store']);
 Route::put('/transactions-member/{id}', [TransactionController::class, 'update']);
-Route::patch('/transactions-member/{id}/status', [TransactionController::class, 'updateStatus']);
+Route::patch('/transactions-member/{id}/{status}', [TransactionController::class, 'updateStatus']);
 Route::delete('/transactions-member/{id}', [TransactionController::class, 'destroy']);
 
 Route::get('/send-message', function () {

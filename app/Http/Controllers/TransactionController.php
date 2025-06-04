@@ -261,6 +261,7 @@ class TransactionController extends Controller
             }
 
             $transaction->save();
+            $transaction->load('items');
 
             DB::commit();
 
@@ -284,7 +285,7 @@ class TransactionController extends Controller
             return response()->json([
                 'status' => 200,
                 'message' => 'Transaction updated successfully',
-                'data' => $transaction->load('items'),
+                'data' => $transaction,
                 'errors' => null
             ], 200);
 
@@ -301,6 +302,16 @@ class TransactionController extends Controller
         if (!$transaction) {
             return $this->notFoundResponse('transaction_id', 'Transaction not found');
         }
+
+        // Ambil dulu semua item sebelum dihapus
+        $items = $transaction->items->map(function ($item) {
+            return [
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'quantity' => $item->quantity,
+                'subtotal' => $item->subtotal,
+            ];
+        });
 
         DB::beginTransaction();
         try {
@@ -322,17 +333,9 @@ class TransactionController extends Controller
                 'member_id' => $transaction->member_id,
                 'transaction_code' => $transaction->transaction_code,
                 'member_name' => $transaction->member_name,
-                'products' => $transaction->items->map(function ($item) {
-                    return [
-                        'product_id' => $item->product_id,
-                        'product_name' => $item->product_name,
-                        'quantity' => $item->quantity,
-                        'subtotal' => $item->subtotal,
-                    ];
-                })->toArray(),
+                'products' => $items->toArray(),
                 'message' => 'Transaction deleted successfully',
             ]);
-
 
             return response()->json([
                 'status' => 200,
@@ -396,25 +399,22 @@ class TransactionController extends Controller
         }
     }
 
-    public function updateStatus(Request $request, $id)
+    public function updateStatus($id, $status)
     {
-        $validator = validator($request->all(), [
-            'status' => 'required|in:pending,completed,cancelled'
-        ]);
-
-        if ($validator->fails()) {
-            return $this->errorResponse('status', $validator->errors()->first('status'), 422);
+        // Validasi status manual karena tidak ada $request
+        if (!in_array($status, ['pending', 'completed', 'cancelled'])) {
+            return $this->errorResponse('status', 'Status must be one of: pending, completed, cancelled', 422);
         }
 
         DB::beginTransaction();
         try {
-            $transaction = Transaction::find($id);
+            $transaction = Transaction::with('items')->find($id);
             if (!$transaction) {
                 DB::rollBack();
                 return $this->notFoundResponse('transaction_id', 'Transaction not found');
             }
 
-            $transaction->status = $request->status;
+            $transaction->status = $status;
             $transaction->save();
 
             ProcessNotification::dispatch([
