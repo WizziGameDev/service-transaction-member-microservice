@@ -7,23 +7,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use App\Models\Transaction;
+use App\Models\TransactionMember;
 use App\Jobs\SendNotificationJob;
 
-class TransactionController extends Controller
+class TransactionMemberController extends Controller
 {
     protected $memberGraphqlUrl;
     protected $productGraphqlUrl;
 
     public function __construct()
     {
-        $this->memberGraphqlUrl = env('MEMBER_GRAPHQL_URL', 'http://localhost:90/api/v1/members/graphql');
-        $this->productGraphqlUrl = env('PRODUCT_GRAPHQL_URL', 'http://localhost:90/api/v1/products/graphql');
+        $this->memberGraphqlUrl = env('MEMBER_GRAPHQL_URL', 'http://traefik:90/api/v1/members/graphql');
+        $this->productGraphqlUrl = env('PRODUCT_GRAPHQL_URL', 'http://traefik:90/api/v1/products/graphql');
     }
-    // GET /transactions (list all)
+    // GET /transactions-member (list all)
     public function index()
     {
-        $transactions = Transaction::with('items')->get();
+        // Get all transaction
+        $transactions = TransactionMember::with('items')->get();
 
         return response()->json([
             'status' => 200,
@@ -33,10 +34,11 @@ class TransactionController extends Controller
         ], 200);
     }
 
-    // GET /transactions/{id} (get single)
+    // GET /transactions-member/{id} (get single)
     public function show($id)
     {
-        $transaction = Transaction::with('items')->find($id);
+        // Get transaction by ID
+        $transaction = TransactionMember::with('items')->find($id);
 
         if (!$transaction) {
             return response()->json([
@@ -55,9 +57,10 @@ class TransactionController extends Controller
         ], 200);
     }
 
-    // POST /transactions (create)
+    // POST /transactions-member (create)
     public function store(Request $request)
     {
+        // Check validation
         $validator = validator($request->all(), [
             'member_id' => 'required|integer',
             'transaction_date' => 'required|date',
@@ -67,6 +70,7 @@ class TransactionController extends Controller
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
+        // Catch validation
         if ($validator->fails()) {
             return response()->json([
                 'status' => 422,
@@ -80,7 +84,7 @@ class TransactionController extends Controller
 
         DB::beginTransaction();
         try {
-            // Fetch member data
+            // Fetch member
             $memberData = $this->fetchMember($request->member_id);
             if (!$memberData) {
                 return $this->notFoundResponse('member_id', 'Member not found');
@@ -90,6 +94,7 @@ class TransactionController extends Controller
             $transactionItemsData = [];
 
             foreach ($request->items as $item) {
+                // Fetch product
                 $productData = $this->fetchProduct($item['product_id']);
                 if (!$productData) {
                     DB::rollBack();
@@ -101,13 +106,14 @@ class TransactionController extends Controller
                     return $this->errorResponse('stock', "Insufficient stock for product {$productData['name']}", 400);
                 }
 
-                // Member Price
+                // Price for member
                 $price = $productData['priceForMember'];
                 if ($price === null) {
                     DB::rollBack();
                     return $this->errorResponse('priceForMember', "Price for member not set for product {$productData['name']}", 400);
                 }
 
+                // Update stock
                 $this->updateProductStock($productData['id'], $productData['stock'] - $item['quantity']);
 
                 $subtotal = $price * $item['quantity'];
@@ -122,8 +128,9 @@ class TransactionController extends Controller
                 ];
             }
 
-            $transaction = Transaction::create([
-                'transaction_code' => 'TRX-' . Str::upper(Str::random(8)),
+            // Create transaction
+            $transaction = TransactionMember::create([
+                'transaction_code' => 'TRX-MEMBER-' . Str::upper(Str::random(8)),
                 'member_id' => $memberData['id'],
                 'member_name' => $memberData['name'],
                 'total_price' => $totalPrice,
@@ -137,14 +144,14 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            // Kirim notifikasi
+            // Send notification
             ProcessNotification::dispatch([
                 'type' => 'transaction_created',
                 'transaction_id' => $transaction->id,
                 'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
-                'phone' => $memberData['phone'] ?? null,
+                'phone' => $memberData['phoneNumber'] ?? null,
                 'status' => $transaction->status,
                 'products' => collect($transactionItemsData)->map(function ($item) {
                     return [
@@ -170,14 +177,16 @@ class TransactionController extends Controller
         }
     }
 
-    // PUT /transactions/{id} (update)
+    // PUT /transactions-member/{id} (update)
     public function update(Request $request, $id)
     {
-        $transaction = Transaction::with('items')->find($id);
+        // Check transaction
+        $transaction = TransactionMember::with('items')->find($id);
         if (!$transaction) {
             return $this->notFoundResponse('transaction_id', 'Transaction not found');
         }
 
+        // Check validation
         $validator = validator($request->all(), [
             'member_id' => 'sometimes|integer',
             'transaction_date' => 'sometimes|date',
@@ -187,6 +196,7 @@ class TransactionController extends Controller
             'items.*.quantity' => 'required_with:items|integer|min:1',
         ]);
 
+        // Catch validation
         if ($validator->fails()) {
             return response()->json([
                 'status' => 422,
@@ -201,6 +211,7 @@ class TransactionController extends Controller
         DB::beginTransaction();
         try {
             if ($request->has('member_id')) {
+                // Check member
                 $memberData = $this->fetchMember($request->member_id);
                 if (!$memberData) {
                     DB::rollBack();
@@ -216,6 +227,7 @@ class TransactionController extends Controller
 
             $totalPrice = 0;
             if ($request->has('items')) {
+                // Check stock
                 foreach ($transaction->items as $oldItem) {
                     $productData = $this->fetchProduct($oldItem->product_id);
                     if ($productData) {
@@ -226,6 +238,7 @@ class TransactionController extends Controller
                 $transaction->items()->delete();
 
                 foreach ($request->items as $item) {
+                    // Check product
                     $productData = $this->fetchProduct($item['product_id']);
                     if (!$productData) {
                         DB::rollBack();
@@ -244,11 +257,13 @@ class TransactionController extends Controller
                         return $this->errorResponse('priceForMember', "Price for member not set for product {$productData['name']}", 400);
                     }
 
+                    // Update stock
                     $this->updateProductStock($productData['id'], $productData['stock'] - $item['quantity']);
 
                     $subtotal = $price * $item['quantity'];
                     $totalPrice += $subtotal;
 
+                    // Update item/product
                     $transaction->items()->create([
                         'product_id' => $productData['id'],
                         'product_name' => $productData['name'],
@@ -264,14 +279,18 @@ class TransactionController extends Controller
             $transaction->save();
             $transaction->load('items');
 
+            $memberData = $this->fetchMember($transaction->member_id);
+
             DB::commit();
 
+            // Send notification
             ProcessNotification::dispatch([
                 'type' => 'transaction_updated',
                 'transaction_id' => $transaction->id,
                 'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
+                'phone' => $memberData['phoneNumber'] ?? null,
                 'status' => $transaction->status,
                 'products' => $transaction->items->map(function ($item) {
                     return [
@@ -297,134 +316,36 @@ class TransactionController extends Controller
         }
     }
 
-    // DELETE /transactions/{id} (delete)
-    public function destroy($id)
-    {
-        $transaction = Transaction::with('items')->find($id);
-        if (!$transaction) {
-            return $this->notFoundResponse('transaction_id', 'Transaction not found');
-        }
-
-        // Ambil dulu semua item sebelum dihapus
-        $items = $transaction->items->map(function ($item) {
-            return [
-                'product_id' => $item->product_id,
-                'product_name' => $item->product_name,
-                'quantity' => $item->quantity,
-                'subtotal' => $item->subtotal,
-            ];
-        });
-
-        DB::beginTransaction();
-        try {
-            foreach ($transaction->items as $item) {
-                $productData = $this->fetchProduct($item->product_id);
-                if ($productData) {
-                    $this->updateProductStock($item->product_id, $productData['stock'] + $item->quantity);
-                }
-            }
-
-            $transaction->items()->delete();
-            $transaction->delete();
-
-            DB::commit();
-
-            ProcessNotification::dispatch([
-                'type' => 'transaction_deleted',
-                'transaction_id' => $transaction->id,
-                'member_id' => $transaction->member_id,
-                'transaction_code' => $transaction->transaction_code,
-                'member_name' => $transaction->member_name,
-                'products' => $items->toArray(),
-                'message' => 'Transaction deleted successfully',
-            ]);
-
-            return response()->json([
-                'status' => 200,
-                'message' => 'Transaction deleted successfully',
-                'data' => null,
-                'errors' => null
-            ], 200);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->errorResponse('sql', 'Failed to delete transaction: ' . $e->getMessage(), 500);
-        }
-    }
-
-    // Helper: Fetch Member
-    private function fetchMember($id)
-    {
-        $query = <<<'GRAPHQL'
-        query getMemberById($id: Int!) {
-            memberById(id: $id) {
-                id
-                name
-            }
-        }
-        GRAPHQL;
-
-        $response = Http::post($this->memberGraphqlUrl, ['query' => $query, 'variables' => ['id' => $id]]);
-        return $response->successful() ? $response['data']['memberById'] ?? null : null;
-    }
-
-    // Helper: Fetch Product
-    private function fetchProduct($id)
-    {
-        $query = <<<'GRAPHQL'
-        query getProductById($id: Int!) {
-            productById(id: $id) {
-                id
-                name
-                priceForMember
-                stock
-            }
-        }
-        GRAPHQL;
-
-        $response = Http::post($this->productGraphqlUrl, ['query' => $query, 'variables' => ['id' => $id]]);
-        return $response->successful() ? $response['data']['productById'] ?? null : null;
-    }
-
-    // Helper: Update Product Stock
-    private function updateProductStock($id, $stock)
-    {
-        $mutation = <<<'GRAPHQL'
-        mutation updateStock($id: Int!, $stock: Int!) {
-            updateStockProduct(id: $id, stock: $stock)
-        }
-        GRAPHQL;
-
-        $response = Http::post($this->productGraphqlUrl, ['query' => $mutation, 'variables' => ['id' => $id, 'stock' => $stock]]);
-        if ($response->failed()) {
-            throw new \Exception("Failed to update stock for product ID $id");
-        }
-    }
-
+    // PATCH /transactions-member/{id}/{status} (patch)
     public function updateStatus($id, $status)
     {
-        // Validasi status manual karena tidak ada $request
+        // Validation Status
         if (!in_array($status, ['pending', 'completed', 'cancelled'])) {
             return $this->errorResponse('status', 'Status must be one of: pending, completed, cancelled', 422);
         }
 
         DB::beginTransaction();
         try {
-            $transaction = Transaction::with('items')->find($id);
+            // Check Transaction
+            $transaction = TransactionMember::with('items')->find($id);
             if (!$transaction) {
                 DB::rollBack();
                 return $this->notFoundResponse('transaction_id', 'Transaction not found');
             }
 
+            $memberData = $this->fetchMember($transaction->member_id);
+
             $transaction->status = $status;
             $transaction->save();
 
+            // Send notification
             ProcessNotification::dispatch([
                 'type' => 'transaction_status_updated',
                 'transaction_id' => $transaction->id,
                 'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
+                'phone' => $memberData['phoneNumber'] ?? null,
                 'status' => $transaction->status,
                 'products' => $transaction->items->map(function ($item) {
                     return [
@@ -451,6 +372,115 @@ class TransactionController extends Controller
         }
     }
 
+    // DELETE /transactions-member/{id} (delete)
+    public function destroy($id)
+    {
+        // Check Transaction
+        $transaction = TransactionMember::with('items')->find($id);
+        if (!$transaction) {
+            return $this->notFoundResponse('transaction_id', 'Transaction not found');
+        }
+
+        // Take Item before delete
+        $items = $transaction->items->map(function ($item) {
+            return [
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'quantity' => $item->quantity,
+                'subtotal' => $item->subtotal,
+            ];
+        });
+
+        DB::beginTransaction();
+        try {
+            foreach ($transaction->items as $item) {
+                $productData = $this->fetchProduct($item->product_id);
+                if ($productData) {
+                    $this->updateProductStock($item->product_id, $productData['stock'] + $item->quantity);
+                }
+            }
+
+            $transaction->items()->delete();
+            $transaction->delete();
+
+            $memberData = $this->fetchMember($transaction->member_id);
+
+            DB::commit();
+
+            // Send notification
+            ProcessNotification::dispatch([
+                'type' => 'transaction_deleted',
+                'transaction_id' => $transaction->id,
+                'member_id' => $transaction->member_id,
+                'transaction_code' => $transaction->transaction_code,
+                'member_name' => $transaction->member_name,
+                'phone' => $memberData['phoneNumber'] ?? null,
+                'products' => $items->toArray(),
+                'message' => 'Transaction deleted successfully',
+            ]);
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Transaction deleted successfully',
+                'data' => null,
+                'errors' => null
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->errorResponse('sql', 'Failed to delete transaction: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // Fetch Member
+    private function fetchMember($id)
+    {
+        $query = <<<'GRAPHQL'
+        query getMemberById($id: Int!) {
+            memberById(id: $id) {
+                id
+                name
+                phoneNumber
+            }
+        }
+        GRAPHQL;
+
+        $response = Http::post($this->memberGraphqlUrl, ['query' => $query, 'variables' => ['id' => $id]]);
+        return $response->successful() ? $response['data']['memberById'] ?? null : null;
+    }
+
+    // Fetch Product
+    private function fetchProduct($id)
+    {
+        $query = <<<'GRAPHQL'
+        query getProductById($id: Int!) {
+            productById(id: $id) {
+                id
+                name
+                priceForMember
+                stock
+            }
+        }
+        GRAPHQL;
+
+        $response = Http::post($this->productGraphqlUrl, ['query' => $query, 'variables' => ['id' => $id]]);
+        return $response->successful() ? $response['data']['productById'] ?? null : null;
+    }
+
+    // Update Product Stock
+    private function updateProductStock($id, $stock)
+    {
+        $mutation = <<<'GRAPHQL'
+        mutation updateStock($id: Int!, $stock: Int!) {
+            updateStockProduct(id: $id, stock: $stock)
+        }
+        GRAPHQL;
+
+        $response = Http::post($this->productGraphqlUrl, ['query' => $mutation, 'variables' => ['id' => $id, 'stock' => $stock]]);
+        if ($response->failed()) {
+            throw new \Exception("Failed to update stock for product ID $id");
+        }
+    }
 
     // Helper: Error Responses
     private function errorResponse($field, $message, $status)

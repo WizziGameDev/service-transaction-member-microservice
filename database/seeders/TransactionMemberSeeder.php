@@ -5,9 +5,9 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
-use App\Models\Transaction;
+use App\Models\TransactionMember;
 
-class TransactionSeeder extends Seeder
+class TransactionMemberSeeder extends Seeder
 {
     public function run(): void
     {
@@ -47,7 +47,7 @@ class TransactionSeeder extends Seeder
         for ($i = 1; $i <= 10; $i++) {
             $member = $members[array_rand($members)];
             $status = $statuses[array_rand($statuses)];
-            $transaction = Transaction::create([
+            $transaction = TransactionMember::create([
                 'transaction_code' => 'TRX-' . Str::upper(Str::random(8)),
                 'member_id' => $member['id'],
                 'member_name' => $member['name'],

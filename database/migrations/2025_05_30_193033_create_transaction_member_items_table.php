@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('transaction_items', function (Blueprint $table) {
+        Schema::create('transaction_member_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('transaction_id')->constrained()->onDelete('cascade');
+            $table->foreignId('transaction_member_id')->constrained('transaction_members')->onDelete('cascade');
             $table->unsignedBigInteger('product_id');
             $table->string('product_name');
             $table->decimal('price', 15, 2);
@@ -28,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('transaction_items');
+        Schema::dropIfExists('transaction_member_items');
     }
 };
