@@ -144,7 +144,8 @@ class TransactionController extends Controller
                 'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
-                'phone' => $memberData['phone'] ?? null, // kalau ada
+                'phone' => $memberData['phone'] ?? null,
+                'status' => $transaction->status,
                 'products' => collect($transactionItemsData)->map(function ($item) {
                     return [
                         'product_id' => $item['product_id'],
@@ -271,6 +272,7 @@ class TransactionController extends Controller
                 'transaction_code' => $transaction->transaction_code,
                 'member_id' => $transaction->member_id,
                 'member_name' => $transaction->member_name,
+                'status' => $transaction->status,
                 'products' => $transaction->items->map(function ($item) {
                     return [
                         'product_id' => $item->product_id,
@@ -327,7 +329,7 @@ class TransactionController extends Controller
 
             DB::commit();
 
-            SendNotificationJob::dispatch([
+            ProcessNotification::dispatch([
                 'type' => 'transaction_deleted',
                 'transaction_id' => $transaction->id,
                 'member_id' => $transaction->member_id,
